@@ -1,103 +1,138 @@
 # 🔍 SOC Lab — Terraform + Docker + Splunk
 
-> Terraform ile Docker üzerinde tam çalışan bir Splunk SIEM ortamı.  
-> SOC Analyst pratiği için ideal local lab kurulumu.
+> A fully functional Splunk SIEM environment deployed with Terraform and Docker.  
+> Ideal local lab setup for SOC Analyst practice.
 
-## 🏛️ Mimari
+## 🏛️ Architecture
 
 ```
 Terraform
     │
-    ├── docker_network  →  soc-lab-network (bridge)
-    ├── docker_volume   →  soc-lab-splunk-data (kalıcı depolama)
-    └── docker_container → soc-lab-splunk
+    ├── docker_network   →  soc-lab-network (bridge)
+    ├── docker_volume    →  soc-lab-splunk-data (persistent storage)
+    └── docker_container →  soc-lab-splunk
             │
-            ├── Port 8000  →  Web UI (tarayıcı)
-            ├── Port 8088  →  HTTP Event Collector (log gönder)
+            ├── Port 8000  →  Web UI (browser)
+            ├── Port 8088  →  HTTP Event Collector (send logs)
             └── Port 9997  →  Universal Forwarder
 ```
 
-## ⚙️ Kurulum
+## ⚙️ Setup
 
-### Gereksinimler
+### Prerequisites
 - [Docker Desktop](https://www.docker.com/products/docker-desktop)
 - [Terraform](https://developer.hashicorp.com/terraform/install) `>= 1.0.0`
 
-### Çalıştır
+### Quick Start
 
 ```bash
-# 1. Terraform başlat
+# Initialize Terraform
 terraform init
 
-# 2. Önizle
+# Preview changes
 terraform plan
 
-# 3. Kur (Splunk image ~1.5GB indirir, bekle)
+# Deploy Splunk (downloads ~1.5GB image, may take a few minutes)
 terraform apply
 
-# 4. Splunk hazır olana kadar bekle (~2-3 dakika)
+# Follow logs until Splunk is ready
 docker logs soc-lab-splunk --follow
+# Wait for: "Ansible playbook complete"
 
-# 5. Tarayıcıda aç
+# Open in browser
 open http://localhost:8000
 ```
 
-### Giriş Bilgileri
+### Credentials
 
 ```bash
-# Şifreyi gör
+# View credentials
 terraform output -json splunk_credentials
 ```
 
-- **Kullanıcı:** `admin`
-- **Şifre:** `SOClab123!` (variables.tf'den değiştirilebilir)
+- **Username:** `admin`
+- **Password:** `SOClab123!` (configurable in variables.tf)
 
-## 🔍 SOC Pratiği
+## 🔍 SOC Practice
 
-### Log Göndermek (HEC ile)
+### Send a Test Log via HEC
 
 ```bash
-# Test logu gönder
-curl -k http://localhost:8088/services/collector \
+# Replace YOUR_HEC_TOKEN with the token from Splunk Web UI
+# Settings → Data Inputs → HTTP Event Collector → New Token
+
+curl -k https://localhost:8088/services/collector \
   -H "Authorization: Splunk YOUR_HEC_TOKEN" \
-  -d '{"event": "Suspicious login attempt from 192.168.1.100", "sourcetype": "security"}'
+  -d '{"event": "Failed login attempt from IP 192.168.1.105", "sourcetype": "security", "source": "auth.log"}'
 ```
 
-### Splunk'ta Temel Sorgular
+### Simulate Security Events
+
+```bash
+# Brute force simulation
+curl -k https://localhost:8088/services/collector \
+  -H "Authorization: Splunk YOUR_HEC_TOKEN" \
+  -d '{"event": "Multiple failed logins from IP 10.0.0.55 - possible brute force", "sourcetype": "security"}'
+
+# Privilege escalation simulation
+curl -k https://localhost:8088/services/collector \
+  -H "Authorization: Splunk YOUR_HEC_TOKEN" \
+  -d '{"event": "sudo command executed by user john - privilege escalation attempt", "sourcetype": "security"}'
+
+# Suspicious outbound connection
+curl -k https://localhost:8088/services/collector \
+  -H "Authorization: Splunk YOUR_HEC_TOKEN" \
+  -d '{"event": "Outbound connection to known malicious IP 185.220.101.45 on port 4444", "sourcetype": "firewall"}'
+```
+
+### Basic SPL Queries
 
 ```spl
-# Tüm eventleri gör
+# View all events
 index=*
 
-# Son 1 saatteki eventler
+# Events from the last hour
 index=* earliest=-1h
 
-# Belirli IP'yi ara
-index=* src_ip="192.168.1.100"
+# Search by specific IP
+index=* "192.168.1.105"
 
-# Hata logları
-index=* level=error | stats count by host
+# Count events by source type
+index=* | stats count by sourcetype
+
+# Security events only
+index=* sourcetype=security | table _time, event
+
+# Find failed logins
+index=* "failed login" | stats count by host
 ```
 
-## 🛑 Durdur / Sil
+## 🛑 Stop / Destroy
 
 ```bash
-# Container'ı durdur (veri kaybolmaz)
+# Destroy all Terraform resources
 terraform destroy
 
-# Sadece container'ı durdur
+# Stop container only (data preserved)
 docker stop soc-lab-splunk
 
-# Tekrar başlat
+# Start again
 docker start soc-lab-splunk
 ```
 
-## 📚 Sonraki Adımlar
+## 📚 Next Steps
 
-- [ ] Splunk'a örnek log gönder (HEC ile)
-- [ ] Dashboard oluştur
-- [ ] Alert kur — belirli event tetiklenince bildirim
-- [ ] Splunk'u TryHackMe SOC Level 1 lablarıyla kullan
+- [ ] Send sample logs via HEC
+- [ ] Build a security dashboard
+- [ ] Create alerts for specific events
+- [ ] Use with TryHackMe SOC Level 1 labs
+- [ ] Add a log generator container to the same Docker network
+
+## 🔗 Resources
+
+- [Splunk Docs](https://docs.splunk.com)
+- [Splunk SPL Reference](https://docs.splunk.com/Documentation/Splunk/latest/SearchReference)
+- [Terraform Docker Provider](https://registry.terraform.io/providers/kreuzwerker/docker/latest/docs)
 
 ---
-*Bu proje SOC Analyst eğitimi için oluşturulmuştur.*
+*This project was created for SOC Analyst training and SIEM practice.*

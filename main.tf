@@ -1,19 +1,19 @@
 # ============================================================
-# MAIN.TF — Splunk altyapısı
+# MAIN.TF — Splunk SOC Lab infrastructure
 # Docker Network + Splunk Container
 # ============================================================
 
 # ── Docker Image ─────────────────────────────────────────────
-# Splunk'un resmi Docker image'ını indir
+# Pull official Splunk Docker image
 resource "docker_image" "splunk" {
   name         = "splunk/splunk:${var.splunk_version}"
-  keep_locally = true  # terraform destroy sonrası image'ı silme
-  platform = "linux/amd64"
+  keep_locally = true  # Keep image after terraform destroy
+  platform     = "linux/amd64"
 }
 
 # ── Docker Network ───────────────────────────────────────────
-# Splunk'un yaşadığı izole ağ
-# İleride başka container eklenirse (örn. log üretici) buraya bağlanır
+# Isolated network for Splunk
+# Additional containers (e.g. log generators) can join this network
 resource "docker_network" "splunk_net" {
   name   = "${var.project_name}-network"
   driver = "bridge"
@@ -24,44 +24,44 @@ resource "docker_container" "splunk" {
   name  = "${var.project_name}-splunk"
   image = docker_image.splunk.image_id
 
-  # Splunk lisans sözleşmesini kabul et (zorunlu)
+  # Accept Splunk license agreement (required)
   env = [
     "SPLUNK_START_ARGS=--accept-license",
     "SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com",
     "SPLUNK_PASSWORD=${var.splunk_password}",
-]
+  ]
 
-  # Port yönlendirme
+  # Port mappings
   ports {
     internal = 8000   # Splunk Web UI
     external = var.splunk_web_port
   }
 
   ports {
-    internal = 8088   # HTTP Event Collector (log göndermek için)
+    internal = 8088   # HTTP Event Collector (for sending logs)
     external = var.splunk_hec_port
   }
 
   ports {
-    internal = 9997   # Splunk Forwarder portu
+    internal = 9997   # Splunk Universal Forwarder port
     external = var.splunk_forwarder_port
   }
 
-  # Ağa bağla
+  # Attach to network
   networks_advanced {
     name = docker_network.splunk_net.name
   }
 
-  # Veriyi kalıcı tut (container silinse bile loglar kaybolmaz)
+  # Persist data (logs survive container restarts)
   volumes {
     volume_name    = docker_volume.splunk_data.name
     container_path = "/opt/splunk/var"
   }
 
-  # Container her zaman yeniden başlasın
+  # Always restart unless manually stopped
   restart = "unless-stopped"
 
-  # Splunk başlaması zaman alır, healthcheck ekle
+  # Healthcheck — Splunk takes time to start
   healthcheck {
     test         = ["CMD", "curl", "-f", "http://localhost:8000/en-US/account/login"]
     interval     = "30s"
@@ -72,7 +72,7 @@ resource "docker_container" "splunk" {
 }
 
 # ── Splunk Data Volume ───────────────────────────────────────
-# Logları ve konfigürasyonu kalıcı sakla
+# Persist logs and configuration across restarts
 resource "docker_volume" "splunk_data" {
   name = "${var.project_name}-splunk-data"
 }

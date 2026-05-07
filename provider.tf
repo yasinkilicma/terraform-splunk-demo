@@ -1,7 +1,7 @@
 # ============================================================
-# PROVIDER.TF — Docker provider kullanıyoruz
-# LocalStack değil, direkt Docker ile konuşuyoruz
-# Splunk gerçekten çalışacak!
+# PROVIDER.TF — Docker provider configuration
+# Manages Docker containers directly (no LocalStack needed)
+# Splunk will actually run and be accessible!
 # ============================================================
 
 terraform {
@@ -16,6 +16,6 @@ terraform {
 }
 
 provider "docker" {
-  # Mac'te Docker Desktop socket path
+  # Docker Desktop socket path on Mac
   host = "unix:///var/run/docker.sock"
 }
